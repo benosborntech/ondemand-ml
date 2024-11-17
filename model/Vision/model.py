@@ -25,7 +25,7 @@ class ViTYOLO(nn.Module):
             nn.Linear(self.hidden_size, self.grid_size * self.grid_size * self.boxes_per_cell * (4 + self.num_classes + 1))
         )
 
-    def forward(self, inputs: torch.Tensor):
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         vit_output = self.vit(inputs)  # (batch_size, num_patches, hidden_size)
         features = vit_output.last_hidden_state  # (batch_size, num_patches, hidden_size)
         
@@ -36,7 +36,8 @@ class ViTYOLO(nn.Module):
         # Pass pooled features through YOLO head
         yolo_output = self.bbox_head(pooled_features)
         
-        # Reshape to (batch_size, grid_size * grid_size, bounding boxes, labels)
-        yolo_output = yolo_output.view(-1, self.grid_size * self.grid_size, self.boxes_per_cell, (4 + self.num_classes + 1))
-        
         return yolo_output
+
+    def reshape(self, inputs: torch.Tensor) -> torch.Tensor:
+        # Reshape to (batch_size, grid_size * grid_size, bounding boxes, labels)
+        return inputs.view(-1, self.grid_size * self.grid_size, self.boxes_per_cell, (4 + self.num_classes + 1))
