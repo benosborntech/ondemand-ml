@@ -37,7 +37,3 @@ class ViTYOLO(nn.Module):
         yolo_output = self.bbox_head(pooled_features)
         
         return yolo_output
-
-    def reshape(self, inputs: torch.Tensor) -> torch.Tensor:
-        # Reshape to (batch_size, grid_size * grid_size, bounding boxes, labels)
-        return inputs.view(-1, self.grid_size * self.grid_size, self.boxes_per_cell, (4 + self.num_classes + 1))

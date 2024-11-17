@@ -4,15 +4,53 @@ import os
 import time
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
+import torch.nn.functional as F
 
 from model import VitModel
 
 
-def yolo_loss(preds, targets, grid_size, boxes_per_cell, num_classes, lambda_coord=5.0, lambda_noobj=0.5):
-    return 0
+def yolo_loss(pred, target, grid_size, boxes_per_cell, num_classes, lambda_coord=5, lambda_noobj=0.5):
+    # Reshape the predictions and targets
+    pred = pred.view(-1, grid_size * grid_size * boxes_per_cell, 4 + num_classes + 1)  # (B, grid_size*grid_size*boxes_per_cell, 5 + num_classes)
+    target = target.view(-1, grid_size * grid_size * boxes_per_cell, 4 + num_classes + 1)
+
+    # Separate the predictions
+    pred_xywh = pred[..., :4]  # (x, y, w, h)
+    pred_conf = pred[..., 4:5]  # Confidence score
+    pred_class = pred[..., 5:]  # Class scores
+
+    # Separate the target
+    target_xywh = target[..., :4]  # (x, y, w, h)
+    target_conf = target[..., 4:5]  # Confidence score
+    target_class = target[..., 5:]  # Class labels
+
+    # Loss components
+    coord_mask = target_conf
+    noobj_mask = 1 - target_conf
+
+    # 1. Coordinate Loss (using MSE)
+    coord_loss = coord_mask * F.mse_loss(pred_xywh, target_xywh, reduction="none")
+    coord_loss = coord_loss.sum() / coord_mask.sum()
+
+    # 2. Confidence Loss
+    obj_loss = coord_mask * F.mse_loss(pred_conf, target_conf, reduction="none")
+    noobj_loss = noobj_mask * F.mse_loss(pred_conf, target_conf, reduction="none")
+    conf_loss = (obj_loss + lambda_noobj * noobj_loss).sum() / (coord_mask.sum() + noobj_mask.sum())
+
+    # 3. Class Loss (using cross-entropy)
+    class_loss = coord_mask * F.cross_entropy(pred_class, target_class.argmax(dim=-1), reduction="none")
+    class_loss = class_loss.sum() / coord_mask.sum()
+
+    # Total Loss
+    total_loss = lambda_coord * coord_loss + conf_loss + class_loss
+    return total_loss
 
 
 def main(args):
+    batch_size = args.batch_size
+    epochs = args.epochs
+    model_path = os.path.join(args.model_dir, "vit_yolo_model.pth")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"using device: {device}")
 
@@ -26,17 +64,11 @@ def main(args):
     x_test = torch.load(args.test_data_x)
     y_test = torch.load(args.test_data_y)
 
-    batch_size = args.batch_size
-
     train_dataset = TensorDataset(x_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     test_dataset = TensorDataset(x_test, y_test)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    epochs = args.epochs
-
-    model_path = os.path.join(args.model_dir, "vit_yolo_model.pth")
 
     for epoch in range(epochs):
         model.train()  # Set model to training mode
@@ -58,7 +90,7 @@ def main(args):
             outputs = model.reshape(outputs)
 
             # Compute the loss
-            loss = yolo_loss() # **** TO BE IMPLEMENTED
+            loss = yolo_loss(outputs, targets, grid_size, boxes_per_cell, num_classes)
 
             # Backpropagation
             loss.backward()
