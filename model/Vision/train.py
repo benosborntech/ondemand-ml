@@ -11,6 +11,7 @@ from model import VitModel
 def yolo_loss(preds, targets, grid_size, boxes_per_cell, num_classes, lambda_coord=5.0, lambda_noobj=0.5):
     return 0
 
+
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"using device: {device}")
