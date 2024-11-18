@@ -50,19 +50,29 @@ def main(args):
     batch_size = args.batch_size
     epochs = args.epochs
     model_path = os.path.join(args.model_dir, "vit_yolo_model.pth")
+    num_classes = args.num_classes
+    boxes_per_cell = args.boxes_per_cell
+    grid_size = args.grid_size
+    hidden_size = args.hidden_size
+    model_name = args.vit_model_name
+
+    train_data_x = args.train_data_x
+    train_data_y = args.train_data_y
+    test_data_x = args.test_data_x
+    test_data_y = args.test_data_y
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"using device: {device}")
 
-    model = VitModel(args.num_classes, args.boxes_per_cell, args.grid_size, args.hidden_size, args.vit_model_name)
+    model = VitModel(num_classes, boxes_per_cell, grid_size, hidden_size, model_name)
 
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    x_train = torch.load(args.train_data_x)
-    y_train = torch.load(args.train_data_y)
+    x_train = torch.load(train_data_x)
+    y_train = torch.load(train_data_y)
 
-    x_test = torch.load(args.test_data_x)
-    y_test = torch.load(args.test_data_y)
+    x_test = torch.load(test_data_x)
+    y_test = torch.load(test_data_y)
 
     train_dataset = TensorDataset(x_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -85,9 +95,6 @@ def main(args):
 
             # Forward pass
             outputs = model(inputs)
-
-            # Reshape outputs to match the target format
-            outputs = model.reshape(outputs)
 
             # Compute the loss
             loss = yolo_loss(outputs, targets, grid_size, boxes_per_cell, num_classes)
@@ -112,8 +119,8 @@ def main(args):
             for inputs, targets in test_loader:
                 inputs, targets = inputs.to(device), targets.to(device)
                 outputs = model(inputs)
-                outputs = model.reshape(outputs)
-                total_test_loss += yolo_loss().item() # **** TO BE IMPLEMENTED
+
+                total_test_loss += yolo_loss().item()
 
             avg_test_loss = total_test_loss / len(test_loader)
 
